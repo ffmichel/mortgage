@@ -6,10 +6,18 @@ verify_ssl = true
 [dev-packages]
 yapf = "*"
 flake8 = "*"
+ipython = "*"
+jupyter = "*"
+jupyter-contrib-nbextensions = "*"
+jupyter-nbextensions-configurator = "*"
 
 [packages]
 numpy = "*"
 pandas = "*"
+sympy = "*"
 
 [requires]
 python_version = "3.7"
+
+[scripts]
+notebook = "bash -c \"jupyter contrib nbextension install --user && jupyter nbextensions_configurator enable --user && jupyter notebook --notebook-dir=.\" "

@@ -37,19 +37,21 @@ def monthly_principal(principal, mortgage_rate_monthly, mortgage_term_month):
     return monthly_amount - month_interest
 
 
-def yearly_interest(principal, mortgage_rate_monthly, mortgage_term_month):
-    month_interest = monthly_interest(principal, mortgage_rate_monthly,
-                                      mortgage_term_month)
-    return np.sum(np.reshape(month_interest, (-1, 12)), axis=-1)
-
-
 def mortgage_interest_deduction(principal,
                                 mortgage_rate_monthly,
                                 mortgage_term_month,
                                 principal_cap=PRINCIPAL_CAP):
-    capped_principal = min(principal, principal_cap)
-    return yearly_interest(capped_principal, mortgage_rate_monthly,
-                           mortgage_term_month)
+    monthly_capped_principal = np.minimum(
+        principal_k(principal, mortgage_rate_monthly, mortgage_term_month),
+        principal_cap)
+    interest_monthly = mortgage_rate_monthly * monthly_capped_principal
+    return np.sum(np.reshape(interest_monthly, (-1, 12)), axis=-1)
+
+
+def yearly_property_tax(home_price, property_tax_rate,
+                        home_value_increase_rate, num_years):
+    y = np.arange(num_years)
+    return property_tax_rate * (1 + home_value_increase_rate)**y * home_price
 
 
 def yearly_deductions(marginal_tax_rate,
@@ -82,8 +84,8 @@ def format_table(titles, monthly_arrays):
         msg_list.append(
             separation_character.join(
                 ['{:<12}'.format(title) for title in line_title]))
-    msg_list.insert(0, '='*len(msg_list[-1]))
-    msg_list.append('='*len(msg_list[-1]))
+    msg_list.insert(0, '=' * len(msg_list[-1]))
+    msg_list.append('=' * len(msg_list[-1]))
     msg_list.extend([
         separation_character.join(
             ['{:>12}'.format('{:,.0f}'.format(val)) for val in values])
@@ -106,11 +108,10 @@ def run():
         type=float,
         required=True,
         help='Annual mortgage rate. Example: 0.035 for 3.5 percent')
-    parser.add_argument(
-        '--downpayment',
-        type=float,
-        required=True,
-        help='Downpayment percentage. Example: 0.3 for 30 percent')
+    parser.add_argument('--downpayment',
+                        type=int,
+                        required=True,
+                        help='Downpayment amount in dollars.')
     parser.add_argument('--mortgage_term',
                         type=int,
                         required=True,
@@ -131,6 +132,10 @@ def run():
         type=int,
         default=120,
         help='Homeowner  insurance monthly. Default $%(default)s')
+    parser.add_argument('--home_value_increase_rate',
+                        type=float,
+                        default=0.015,
+                        help='Home price reevaluation by county every year')
     parser.add_argument('--display_period_start',
                         type=int,
                         default=0,
@@ -146,11 +151,15 @@ def run():
 
     args = parser.parse_args()
     rate_monthly = args.mortgage_rate / 12
-    downpayment = args.downpayment * args.home_value
-    initial_principal = (1 - args.downpayment) * args.home_value
+    downpayment = args.downpayment
+    downpayment_percent = downpayment / args.home_value
+    initial_principal = args.home_value - downpayment
 
     mortgage_term_monthly = 12 * args.mortgage_term
-    property_tax_yearly = args.home_value * args.property_tax
+    property_tax_yearly = yearly_property_tax(args.home_value,
+                                              args.property_tax,
+                                              args.home_value_increase_rate,
+                                              args.mortgage_term)
 
     tax_deduction_yearly = yearly_deductions(args.marginal_tax_rate,
                                              initial_principal, rate_monthly,
@@ -158,7 +167,7 @@ def run():
                                              property_tax_yearly)
 
     tax_deduction_monthly = yearly_to_monthly(tax_deduction_yearly)
-    property_tax_monthly = property_tax_yearly / 12
+    property_tax_monthly = yearly_to_monthly(property_tax_yearly)
 
     monthly_principal_payment = monthly_principal(initial_principal,
                                                   rate_monthly,
@@ -181,7 +190,8 @@ def run():
                                       mortgage_term_monthly)
 
     print(f'House price: {args.home_value:,.0f}')
-    print(f'Downpayment: {downpayment:,.0f} ({args.downpayment * 100}%)')
+    print(
+        f'Downpayment: {downpayment:,.0f} ({downpayment_percent * 100:.2f}%)')
     print(f'Monthly payment: {payment_monthly:,.0f}')
     monthly_arrays = [
         monthly_interest_payment, monthly_principal_payment,
